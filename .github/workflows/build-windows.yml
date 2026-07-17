@@ -1,0 +1,64 @@
+name: Build Windows imx_usb
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-libusb
+            mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Build imx_usb
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist
+
+          gcc \
+            -O2 \
+            -static-libgcc \
+            -o dist/imx_usb.exe \
+            imx_usb.c \
+            imx_sdp.c \
+            imx_loader_config.c \
+            sdp.c \
+            sdps.c \
+            imx_sdp_simulation.c \
+            $(pkg-config --cflags --libs libusb-1.0)
+
+      - name: Copy runtime and configuration files
+        shell: msys2 {0}
+        run: |
+          cp /ucrt64/bin/libusb-1.0.dll dist/
+          cp imx_usb.conf dist/
+          cp *_usb_work.conf dist/ 2>/dev/null || true
+          cp linux_gadget.conf dist/ 2>/dev/null || true
+
+      - name: Show dependencies
+        shell: msys2 {0}
+        run: |
+          ldd dist/imx_usb.exe || true
+          ls -la dist
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: imx-usb-loader-windows-x64
+          path: dist/*
+          if-no-files-found: error
